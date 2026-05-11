@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "122278913401",
+    "project_id": "geo-messenger-65845",
+    "storage_bucket": "geo-messenger-65845.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:122278913401:android:0ebbad85bdeb2309213ba8",
+        "android_client_info": {
+          "package_name": "com.example.geo_messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAD8QnqMR3M6fqo2zTF9H8P2aVnbxUzbZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

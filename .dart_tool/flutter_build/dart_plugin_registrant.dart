@@ -7,12 +7,13 @@
 
 import 'dart:io'; // flutter_ignore: dart_io_import.
 import 'package:geolocator_android/geolocator_android.dart' as geolocator_android;
-import 'package:google_maps_flutter_android/google_maps_flutter_android.dart' as google_maps_flutter_android;
+import 'package:google_sign_in_android/google_sign_in_android.dart' as google_sign_in_android;
 import 'package:geolocator_apple/geolocator_apple.dart' as geolocator_apple;
-import 'package:google_maps_flutter_ios/google_maps_flutter_ios.dart' as google_maps_flutter_ios;
+import 'package:google_sign_in_ios/google_sign_in_ios.dart' as google_sign_in_ios;
 import 'package:geolocator_linux/geolocator_linux.dart' as geolocator_linux;
 import 'package:package_info_plus/package_info_plus.dart' as package_info_plus;
 import 'package:geolocator_apple/geolocator_apple.dart' as geolocator_apple;
+import 'package:google_sign_in_ios/google_sign_in_ios.dart' as google_sign_in_ios;
 import 'package:package_info_plus/package_info_plus.dart' as package_info_plus;
 
 @pragma('vm:entry-point')
@@ -31,10 +32,10 @@ class _PluginRegistrant {
       }
 
       try {
-        google_maps_flutter_android.GoogleMapsFlutterAndroid.registerWith();
+        google_sign_in_android.GoogleSignInAndroid.registerWith();
       } catch (err) {
         print(
-          '`google_maps_flutter_android` threw an error: $err. '
+          '`google_sign_in_android` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -50,10 +51,10 @@ class _PluginRegistrant {
       }
 
       try {
-        google_maps_flutter_ios.GoogleMapsFlutterIOS.registerWith();
+        google_sign_in_ios.GoogleSignInIOS.registerWith();
       } catch (err) {
         print(
-          '`google_maps_flutter_ios` threw an error: $err. '
+          '`google_sign_in_ios` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -83,6 +84,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`geolocator_apple` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        google_sign_in_ios.GoogleSignInIOS.registerWith();
+      } catch (err) {
+        print(
+          '`google_sign_in_ios` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
