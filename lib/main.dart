@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'Screens/login_screen.dart';
+import 'Screens/map_screen.dart';
 
 const FirebaseOptions webFirebaseOptions = FirebaseOptions(
   apiKey: 'AIzaSyCX2CShAmzwAOt20m4ubpZMtK0j3N4Z7zw',
@@ -40,7 +40,7 @@ class GeoMessengerApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: LoginScreen(),
+      home: MapScreen(),
     );
   }
 }

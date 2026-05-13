@@ -7,9 +7,8 @@ class AuthService {
       '697148975888-5kv4rjeflma4rd2jaa24f92pgtecdu7v.apps.googleusercontent.com';
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = kIsWeb
-      ? GoogleSignIn(clientId: _webClientId)
-      : GoogleSignIn();
+  final GoogleSignIn _googleSignIn =
+      kIsWeb ? GoogleSignIn(clientId: _webClientId) : GoogleSignIn();
 
   /// Iniciar sesión con Google
   Future<User?> signInWithGoogle() async {
@@ -51,13 +50,16 @@ class AuthService {
 
       if (e.toString().contains("ClientID not set")) {
         print("❌ Error: Google Sign-In no está configurado");
-        print("Solución: configura el Client ID en web/index.html o con GoogleSignIn(clientId: ...)");
+        print(
+            "Solución: configura el Client ID en web/index.html o con GoogleSignIn(clientId: ...)");
       }
 
       if (e.toString().contains("invalid_client")) {
         print("❌ Error: invalid_client");
-        print("Solución: verifica que este client ID sea un OAuth 2.0 Client ID de tipo web");
-        print("y que tengas autorizado el origen http://localhost:53943 en Google Cloud Console");
+        print(
+            "Solución: verifica que este client ID sea un OAuth 2.0 Client ID de tipo web");
+        print(
+            "y que tengas autorizado el origen http://localhost:53943 en Google Cloud Console");
       }
       return null;
     }
