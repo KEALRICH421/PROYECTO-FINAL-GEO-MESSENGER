@@ -30,7 +30,11 @@ class _MapScreenState extends State<MapScreen> {
 
   /// Inicializa permisos y ubicación
   Future<void> _initialize() async {
+  try {
     await LocationManager.requestPermission();
+
+    _listenLocation(); // 👈 primero activas stream
+
     var position = await LocationManager.getCurrentLocation();
 
     if (!mounted) return;
@@ -38,29 +42,26 @@ class _MapScreenState extends State<MapScreen> {
     _currentPosition = LatLng(position.latitude, position.longitude);
     setState(() {});
 
+  } catch (e) {
+    print("ERROR GPS INIT: $e");
+
+    // NO bloqueas la app
     _listenLocation();
   }
+}
 
   /// Escucha cambios de ubicación
-  void _listenLocation() {
-    LocationManager.getLocationStream().listen((position) {
-      if (!mounted) return;
+ void _listenLocation() {
+  LocationManager.getLocationStream().listen((position) {
+    if (!mounted) return;
 
+    setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
-      setState(() {});
-
-      var activated = GeofenceService.evaluateGeofences(
-        position.latitude,
-        position.longitude,
-        _notes,
-      );
-
-      for (var note in activated) {
-        if (!mounted) return;
-        NotificationService.showAlert(context, note.message);
-      }
     });
-  }
+  }, onError: (e) {
+    print("STREAM ERROR: $e");
+  });
+}
 
   void _deleteNote(int index) {
     _notes.removeAt(index);
@@ -182,7 +183,8 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.example.app',
               ),
               MarkerLayer(markers: allMarkers),
