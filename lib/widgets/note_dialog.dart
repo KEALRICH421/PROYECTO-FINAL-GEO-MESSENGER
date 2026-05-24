@@ -34,3 +34,75 @@ class NoteDialog {
     );
   }
 }
+
+import 'package:flutter/material.dart';
+
+/// Dialogo reutilizable para crear notas
+class NoteDialog {
+
+  static Future<String?> show(
+      BuildContext context) async {
+
+    TextEditingController controller =
+        TextEditingController();
+
+    return showDialog<String>(
+
+      context: context,
+
+      builder: (_) => AlertDialog(
+
+        title:
+            const Text("Nueva Nota"),
+
+        content: TextField(
+
+          controller: controller,
+
+          decoration:
+              const InputDecoration(
+
+            hintText:
+                "Escribe tu recordatorio",
+          ),
+        ),
+
+        actions: [
+
+          TextButton(
+
+            onPressed: () {
+
+              Navigator.pop(context);
+            },
+
+            child:
+                const Text("Cancelar"),
+          ),
+
+          TextButton(
+
+            onPressed: () {
+
+              if (controller.text
+                  .trim()
+                  .isNotEmpty) {
+
+                Navigator.pop(
+
+                  context,
+
+                  controller.text
+                      .trim(),
+                );
+              }
+            },
+
+            child:
+                const Text("Guardar"),
+          ),
+        ],
+      ),
+    );
+  }
+}
