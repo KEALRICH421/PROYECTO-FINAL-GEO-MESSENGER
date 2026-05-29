@@ -1,33 +1,37 @@
 import 'package:flutter/material.dart';
 
-/// Widget reutilizable para crear notas.
-/// Mejora la organización del código.
 class NoteDialog {
-  static Future<String?> show(BuildContext context) async {
-    TextEditingController controller = TextEditingController();
+  static Future<String?> show(
+    BuildContext context, {
+    String? initialText,
+    String title = 'Nueva Nota',
+    String saveButton = 'Guardar',
+  }) async {
+    final controller = TextEditingController(text: initialText ?? '');
 
     return showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Nueva Nota"),
+        title: Text(title),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(
-            hintText: "Escribe tu recordatorio",
+            hintText: 'Escribe tu recordatorio',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar"),
+            child: const Text('Cancelar'),
           ),
           TextButton(
             onPressed: () {
-              if (controller.text.isNotEmpty) {
-                Navigator.pop(context, controller.text);
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.pop(context, text);
               }
             },
-            child: const Text("Guardar"),
+            child: Text(saveButton),
           ),
         ],
       ),

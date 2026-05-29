@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+
 import '../Services/auth_service.dart';
-import 'map_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,27 +13,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
-  void _handleSignIn() async {
+  Future<void> _handleSignIn() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      var user = await _authService.signInWithGoogle();
+      final user = await _authService.signInWithGoogle();
 
-      if (user != null) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MapScreen(),
-            ),
-          );
-        }
-      } else {
+      if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error al iniciar sesión')),
+            const SnackBar(
+              content: Text(
+                'Error al iniciar sesión. Revisa tu configuración de Google Sign-In y prueba de nuevo.',
+              ),
+            ),
           );
         }
       }
@@ -60,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ? const CircularProgressIndicator()
             : ElevatedButton.icon(
                 icon: const Icon(Icons.login),
-                label: const Text("Iniciar sesión con Google"),
+                label: const Text('Iniciar sesión con Google'),
                 onPressed: _handleSignIn,
               ),
       ),

@@ -4,30 +4,41 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>['email', 'profile'],
+  );
 
-  /// Iniciar sesión con Google (WEB + FIREBASE CORRECTO)
   Future<User?> signInWithGoogle() async {
     try {
-      print("Iniciando Google Sign-In...");
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        final userCredential = await _auth.signInWithPopup(provider);
+        return userCredential.user;
+      }
 
-      final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        debugPrint('GoogleSignIn returned null after account selection.');
+        return null;
+      }
 
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithPopup(googleProvider);
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
 
-      print("Login exitoso: ${userCredential.user?.email}");
-
+      final userCredential = await _auth.signInWithCredential(credential);
       return userCredential.user;
-    } catch (e) {
-      print("Error login: $e");
-      print("Stack trace: ${StackTrace.current}");
-
-      return null;
+    } catch (e, stackTrace) {
+      debugPrint('ERROR LOGIN GOOGLE: $e');
+      debugPrint(stackTrace.toString());
+      rethrow;
     }
   }
 
-  /// Cerrar sesión
   Future<void> signOut() async {
-    await FirebaseAuth.instance.signOut();
+    await _googleSignIn.signOut();
+    await _auth.signOut();
   }
 }
