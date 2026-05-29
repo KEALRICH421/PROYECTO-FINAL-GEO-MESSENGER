@@ -1,41 +1,9 @@
-/// Modelo que representa una nota geolocalizada.
-/// Contiene coordenadas, mensaje y configuración de activación.
-class GeoNote {
-  final double lat;
-  final double lng;
-  final String message;
-  final double radius;
-
-  bool triggered;
-
-  GeoNote({
-    required this.lat,
-    required this.lng,
-    required this.message,
-    this.radius = 100,
-    this.triggered = false,
-  });
-
-  /// Convierte el objeto a formato JSON (útil para persistencia futura)
-  Map<String, dynamic> toJson() => {
-        'lat': lat,
-        'lng': lng,
-        'message': message,
-        'radius': radius,
-        'triggered': triggered,
-      };
-}
-
 class GeoNote {
   final String? id;
-
   final double lat;
   final double lng;
-
   final String message;
-
   final double radius;
-
   bool triggered;
 
   GeoNote({
@@ -43,23 +11,10 @@ class GeoNote {
     required this.lat,
     required this.lng,
     required this.message,
-    this.radius = 100,
+    this.radius = 100.0,
     this.triggered = false,
   });
 
-  /// FIRESTORE → OBJETO
-  factory GeoNote.fromFirestore(Map<String, dynamic> data, String id) {
-    return GeoNote(
-      id: id,
-      lat: data['lat'],
-      lng: data['lng'],
-      message: data['message'],
-      radius: data['radius'],
-      triggered: data['triggered'],
-    );
-  }
-
-  /// OBJETO → FIRESTORE
   Map<String, dynamic> toMap() {
     return {
       'lat': lat,
@@ -68,5 +23,16 @@ class GeoNote {
       'radius': radius,
       'triggered': triggered,
     };
+  }
+
+  factory GeoNote.fromFirestore(Map<String, dynamic> data, String id) {
+    return GeoNote(
+      id: id,
+      lat: (data['lat'] as num).toDouble(),
+      lng: (data['lng'] as num).toDouble(),
+      message: data['message'] as String? ?? '',
+      radius: (data['radius'] as num?)?.toDouble() ?? 100.0,
+      triggered: data['triggered'] as bool? ?? false,
+    );
   }
 }

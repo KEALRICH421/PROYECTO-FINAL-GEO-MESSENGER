@@ -1,12 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-
-import '../Core/location_manager.dart';
-import '../Models/geo_note.dart';
-import '../services/geofence_service.dart';
-import '../services/notification_service.dart';
-import '../widgets/note_dialog.dart';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -14,10 +6,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../Core/location_manager.dart';
 import '../Models/geo_note.dart';
-import '../services/firestore_service.dart';
+import '../Services/firestore_service.dart';
+import '../Services/geofence_service.dart';
+import '../Services/notification_service.dart';
 import '../widgets/note_dialog.dart';
+import '../widgets/user_profile.dart';
 
-/// Pantalla principal con mapa y notas geolocalizadas
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -27,13 +21,10 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
-
-  final FirestoreService _firestoreService =
-      FirestoreService();
-
+  final FirestoreService _firestoreService = FirestoreService();
   final List<GeoNote> _notes = [];
-
   LatLng? _currentPosition;
+  LatLng? _lastTapPosition;
 
   @override
   void initState() {
@@ -41,43 +32,50 @@ class _MapScreenState extends State<MapScreen> {
     _initialize();
   }
 
-  /// Inicializa GPS y carga notas
+  @override
+  void dispose() {
+    _notesSubscription?.cancel();
+    super.dispose();
+  }
+
+  StreamSubscription<List<GeoNote>>? _notesSubscription;
+
   Future<void> _initialize() async {
     try {
       await LocationManager.requestPermission();
-
       _listenLocation();
+      _listenNotes();
 
-      final position =
-          await LocationManager.getCurrentLocation();
+      final position = await LocationManager.getCurrentLocation();
 
       if (!mounted) return;
 
       setState(() {
-        _currentPosition = LatLng(
-          position.latitude,
-          position.longitude,
-        );
+        _currentPosition = LatLng(position.latitude, position.longitude);
       });
-
-      await _loadNotes();
     } catch (e) {
       debugPrint('ERROR INIT: $e');
     }
   }
 
-  /// Escucha cambios de ubicación
   void _listenLocation() {
     LocationManager.getLocationStream().listen(
       (position) {
         if (!mounted) return;
 
         setState(() {
-          _currentPosition = LatLng(
-            position.latitude,
-            position.longitude,
-          );
+          _currentPosition = LatLng(position.latitude, position.longitude);
         });
+
+        final activated = GeofenceService.evaluateGeofences(
+          position.latitude,
+          position.longitude,
+          _notes,
+        );
+
+        for (var note in activated) {
+          NotificationService.showAlert(context, note.message);
+        }
       },
       onError: (e) {
         debugPrint('LOCATION STREAM ERROR: $e');
@@ -85,27 +83,25 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  /// Carga notas desde Firestore
-  Future<void> _loadNotes() async {
-    try {
-      final loadedNotes =
-          await _firestoreService.loadNotes();
-
-      if (!mounted) return;
-
-      setState(() {
-        _notes.clear();
-        _notes.addAll(loadedNotes);
-      });
-    } catch (e) {
-      debugPrint('ERROR LOAD NOTES: $e');
-    }
+  void _listenNotes() {
+    _notesSubscription = _firestoreService.noteStream().listen(
+      (loadedNotes) {
+        if (!mounted) return;
+        setState(() {
+          _notes
+            ..clear()
+            ..addAll(loadedNotes);
+        });
+      },
+      onError: (e) {
+        debugPrint('ERROR NOTE STREAM: $e');
+      },
+    );
   }
 
-  /// Agrega una nueva nota
   Future<void> _addNote(LatLng position) async {
-    final message = await NoteDialog.show(context);
-
+    final currentContext = context;
+    final message = await NoteDialog.show(currentContext);
     if (message == null || message.trim().isEmpty) {
       return;
     }
@@ -116,67 +112,136 @@ class _MapScreenState extends State<MapScreen> {
       message: message.trim(),
     );
 
+    // ignore: use_build_context_synchronously
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _firestoreService.saveNote(note);
-
       if (!mounted) return;
-
-      setState(() {
-        _notes.add(note);
-      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nota guardada correctamente.')),
+      );
     } catch (e) {
       debugPrint('ERROR SAVE NOTE: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error al guardar nota: $e')),
+        );
+      }
     }
   }
 
-  /// Eliminar nota
   Future<void> _deleteNote(int index) async {
+    final note = _notes[index];
+    if (note.id == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      final note = _notes[index];
-
-      await _firestoreService.deleteNote(note);
-
+      await _firestoreService.deleteNote(note.id!);
       if (!mounted) return;
 
       setState(() {
         _notes.removeAt(index);
       });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nota eliminada.')),
+      );
     } catch (e) {
       debugPrint('ERROR DELETE NOTE: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error al eliminar nota: $e')),
+        );
+      }
     }
   }
 
-  /// Dialogo de información
-  void _showNoteDialog(int index) {
-    final note = _notes[index];
+  Future<void> _editNote(GeoNote note) async {
+    if (note.id == null) return;
 
-    showDialog(
-      context: context,
+    final currentContext = context;
+    final message = await NoteDialog.show(
+      currentContext,
+      initialText: note.message,
+      title: 'Editar Nota',
+      saveButton: 'Actualizar',
+    );
+
+    if (message == null || message.trim().isEmpty) {
+      return;
+    }
+
+    try {
+      await _firestoreService.updateNote(note.id!, {'message': message.trim()});
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nota actualizada.')),
+      );
+    } catch (e) {
+      debugPrint('ERROR UPDATE NOTE: $e');
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error al actualizar nota: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showNoteDialog(int index) async {
+    final note = _notes[index];
+    final currentContext = context;
+
+    final action = await showDialog<String?>(
+      context: currentContext,
       builder: (_) => AlertDialog(
         title: Text(note.message),
-        content: Text(
-          'Lat: ${note.lat}\nLng: ${note.lng}',
-        ),
+        content: Text('Lat: ${note.lat}\nLng: ${note.lng}'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(currentContext, 'close'),
             child: const Text('Cerrar'),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _deleteNote(index);
-            },
+            onPressed: () => Navigator.pop(currentContext, 'edit'),
+            child: const Text('Editar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(currentContext, 'delete'),
             child: const Text('Eliminar'),
           ),
         ],
       ),
     );
+
+    if (action == 'edit') {
+      await _editNote(note);
+    } else if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        // ignore: use_build_context_synchronously
+        context: currentContext,
+        builder: (_) => AlertDialog(
+          title: const Text('Confirmar eliminación'),
+          content: const Text('¿Seguro que quieres eliminar esta nota?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(currentContext, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(currentContext, true),
+              child: const Text('Sí, eliminar'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        await _deleteNote(index);
+      }
+    }
   }
 
-  /// Marcadores de notas
   List<Marker> _buildMarkers() {
     return [
       ..._notes.asMap().entries.map(
@@ -199,8 +264,6 @@ class _MapScreenState extends State<MapScreen> {
           );
         },
       ),
-
-      /// Marcador ubicación actual
       if (_currentPosition != null)
         Marker(
           point: _currentPosition!,
@@ -228,18 +291,19 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Geo Messenger PRO'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_location),
-            onPressed: () {
-              _addNote(
-                _mapController.camera.center,
-              );
-            },
-          ),
-        ],
       ),
-
+      drawer: UserProfile(
+        notes: _notes,
+        onNoteSelected: (note) {
+          _mapController.move(LatLng(note.lat, note.lng), 17);
+          setState(() {
+            _lastTapPosition = LatLng(note.lat, note.lng);
+          });
+        },
+        onNoteEdit: (note) async {
+          await _editNote(note);
+        },
+      ),
       body: Stack(
         children: [
           FlutterMap(
@@ -247,13 +311,13 @@ class _MapScreenState extends State<MapScreen> {
             options: MapOptions(
               initialCenter: _currentPosition!,
               initialZoom: 15,
-              interactionOptions:
-                  const InteractionOptions(
+              interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
-
-              /// Tap en mapa
               onTap: (tapPosition, point) {
+                setState(() {
+                  _lastTapPosition = point;
+                });
                 _addNote(point);
               },
             ),
@@ -262,17 +326,13 @@ class _MapScreenState extends State<MapScreen> {
                 urlTemplate:
                     'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
-                userAgentPackageName:
-                    'com.example.geomessenger',
+                userAgentPackageName: 'com.example.geomessenger',
               ),
-
               MarkerLayer(
                 markers: _buildMarkers(),
               ),
             ],
           ),
-
-          /// Botones zoom
           Positioned(
             right: 16,
             bottom: 90,
@@ -289,9 +349,7 @@ class _MapScreenState extends State<MapScreen> {
                   },
                   child: const Icon(Icons.add),
                 ),
-
                 const SizedBox(height: 10),
-
                 FloatingActionButton(
                   heroTag: 'zoomOut',
                   mini: true,
@@ -308,412 +366,29 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
-
-      /// Centrar ubicación actual
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: ElevatedButton.icon(
+            onPressed: (_lastTapPosition ?? _currentPosition) == null
+                ? null
+                : () => _addNote(_lastTapPosition ?? _currentPosition!),
+            icon: const Icon(Icons.add_location),
+            label: const Text('Agregar nota en última ubicación'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+            ),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'location',
         onPressed: () {
           if (_currentPosition != null) {
-            _mapController.move(
-              _currentPosition!,
-              15,
-            );
+            _mapController.move(_currentPosition!, 15);
           }
         },
         child: const Icon(Icons.my_location),
-      ),
-    );
-  }
-}
-import 'package:flutter/material.dart';
-
-import 'package:flutter_map/flutter_map.dart';
-
-import 'package:latlong2/latlong.dart';
-
-import '../core/location_manager.dart';
-
-import '../models/geo_note.dart';
-
-import '../services/firestore_service.dart';
-
-import '../services/geofence_service.dart';
-
-import '../services/notification_service.dart';
-
-import '../widgets/note_dialog.dart';
-
-import '../widgets/user_profile.dart';
-
-class MapScreen
-    extends StatefulWidget {
-
-  const MapScreen({super.key});
-
-  @override
-  State<MapScreen> createState() =>
-      _MapScreenState();
-}
-
-class _MapScreenState
-    extends State<MapScreen> {
-
-  final MapController _mapController =
-      MapController();
-
-  final FirestoreService
-      _firestoreService =
-      FirestoreService();
-
-  final List<GeoNote> _notes = [];
-
-  LatLng? _currentPosition;
-
-  @override
-  void initState() {
-
-    super.initState();
-
-    _initialize();
-  }
-
-  /// Inicializar app
-  Future<void> _initialize() async {
-
-    try {
-
-      await LocationManager
-          .requestPermission();
-
-      final position =
-          await LocationManager
-              .getCurrentLocation();
-
-      _listenLocation();
-
-      setState(() {
-
-        _currentPosition = LatLng(
-          position.latitude,
-          position.longitude,
-        );
-      });
-
-      await _loadNotes();
-
-    } catch (e) {
-
-      debugPrint(
-          'ERROR INIT: $e');
-    }
-  }
-
-  /// Escuchar ubicación
-  void _listenLocation() {
-
-    LocationManager
-        .getLocationStream()
-        .listen(
-
-      (position) {
-
-        if (!mounted) return;
-
-        setState(() {
-
-          _currentPosition = LatLng(
-
-            position.latitude,
-
-            position.longitude,
-          );
-        });
-
-        final activated =
-            GeofenceService
-                .evaluateGeofences(
-
-          position.latitude,
-
-          position.longitude,
-
-          _notes,
-        );
-
-        for (var note in activated) {
-
-          NotificationService
-              .showAlert(
-
-            context,
-
-            note.message,
-          );
-        }
-      },
-    );
-  }
-
-  /// Cargar notas
-  Future<void> _loadNotes() async {
-
-    final loadedNotes =
-        await _firestoreService
-            .loadNotes();
-
-    setState(() {
-
-      _notes.clear();
-
-      _notes.addAll(
-          loadedNotes);
-    });
-  }
-
-  /// Agregar nota
-  Future<void> _addNote(
-      LatLng position) async {
-
-    final message =
-        await NoteDialog.show(
-            context);
-
-    if (message == null) return;
-
-    final note = GeoNote(
-
-      lat: position.latitude,
-
-      lng: position.longitude,
-
-      message: message,
-    );
-
-    await _firestoreService
-        .saveNote(note);
-
-    await _loadNotes();
-  }
-
-  /// Eliminar nota
-  Future<void> _deleteNote(
-      int index) async {
-
-    final note = _notes[index];
-
-    if (note.id == null) return;
-
-    await _firestoreService
-        .deleteNote(note.id!);
-
-    setState(() {
-
-      _notes.removeAt(index);
-    });
-  }
-
-  /// Dialogo información
-  void _showNoteDialog(
-      int index) {
-
-    final note = _notes[index];
-
-    showDialog(
-
-      context: context,
-
-      builder: (_) => AlertDialog(
-
-        title:
-            Text(note.message),
-
-        content: Text(
-
-          'Lat: ${note.lat}\n'
-          'Lng: ${note.lng}',
-        ),
-
-        actions: [
-
-          TextButton(
-
-            onPressed: () {
-
-              Navigator.pop(
-                  context);
-            },
-
-            child:
-                const Text("Cerrar"),
-          ),
-
-          TextButton(
-
-            onPressed: () async {
-
-              Navigator.pop(
-                  context);
-
-              await _deleteNote(
-                  index);
-            },
-
-            child:
-                const Text("Eliminar"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Crear marcadores
-  List<Marker> _buildMarkers() {
-
-    return [
-
-      ..._notes
-          .asMap()
-          .entries
-          .map((entry) {
-
-        final index = entry.key;
-
-        final note = entry.value;
-
-        return Marker(
-
-          point: LatLng(
-            note.lat,
-            note.lng,
-          ),
-
-          width: 50,
-          height: 50,
-
-          child: GestureDetector(
-
-            onTap: () {
-
-              _showNoteDialog(
-                  index);
-            },
-
-            child: const Icon(
-
-              Icons.location_on,
-
-              color: Colors.red,
-
-              size: 40,
-            ),
-          ),
-        );
-      }),
-
-      if (_currentPosition != null)
-
-        Marker(
-
-          point: _currentPosition!,
-
-          width: 50,
-          height: 50,
-
-          child: const Icon(
-
-            Icons.my_location,
-
-            color: Colors.blue,
-
-            size: 40,
-          ),
-        ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-
-    if (_currentPosition == null) {
-
-      return const Scaffold(
-
-        body: Center(
-          child:
-              CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    return Scaffold(
-
-      drawer:
-          const UserProfile(),
-
-      appBar: AppBar(
-
-        title:
-            const Text(
-                "Geo Messenger"),
-      ),
-
-      body: FlutterMap(
-
-        mapController:
-            _mapController,
-
-        options: MapOptions(
-
-          initialCenter:
-              _currentPosition!,
-
-          initialZoom: 15,
-
-          onTap:
-              (tapPosition, point) {
-
-            _addNote(point);
-          },
-        ),
-
-        children: [
-
-          TileLayer(
-
-            urlTemplate:
-                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-
-            userAgentPackageName:
-                'com.example.geo_messenger',
-          ),
-
-          MarkerLayer(
-
-            markers:
-                _buildMarkers(),
-          ),
-        ],
-      ),
-
-      floatingActionButton:
-          FloatingActionButton(
-
-        onPressed: () {
-
-          if (_currentPosition != null) {
-
-            _mapController.move(
-
-              _currentPosition!,
-
-              15,
-            );
-          }
-        },
-
-        child:
-            const Icon(
-                Icons.my_location),
       ),
     );
   }
