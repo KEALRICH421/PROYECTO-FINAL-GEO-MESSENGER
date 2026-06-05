@@ -5,6 +5,7 @@ class GeoNote {
   final String message;
   final double radius;
   bool triggered;
+  final String? userId; // ← NUEVO: ID del usuario que creó la nota
 
   GeoNote({
     this.id,
@@ -13,6 +14,7 @@ class GeoNote {
     required this.message,
     this.radius = 100.0,
     this.triggered = false,
+    this.userId, // ← NUEVO
   });
 
   Map<String, dynamic> toMap() {
@@ -22,6 +24,7 @@ class GeoNote {
       'message': message,
       'radius': radius,
       'triggered': triggered,
+      if (userId != null) 'userId': userId, // ← NUEVO: solo si no es null
     };
   }
 
@@ -33,6 +36,7 @@ class GeoNote {
       message: data['message'] as String? ?? '',
       radius: (data['radius'] as num?)?.toDouble() ?? 100.0,
       triggered: data['triggered'] as bool? ?? false,
+      userId: data['userId'] as String?, // ← NUEVO
     );
   }
 }
